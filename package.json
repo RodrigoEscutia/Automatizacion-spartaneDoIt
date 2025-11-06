@@ -1,0 +1,14 @@
+{
+  "name": "playwright-spartane",
+  "version": "1.0.0",
+  "description": "Framework de automatización de pruebas con Playwright para spartane.ai/doit",
+  "main": "index.js",
+  "scripts": {
+    "test": "npx playwright test"
+  },
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@playwright/test": "^1.42.0"
+  }
+}
