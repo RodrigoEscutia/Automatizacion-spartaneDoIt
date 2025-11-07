@@ -1,10 +1,11 @@
-import { test, expect } from '@playwright/test';
+
+import { test, expect, Page } from '@playwright/test';
 
 const URL = 'https://spartane.ai/doit/auth/login';
 const USER = 'joserodrigoingsis@gmail.com';
 const PASS = '$Admin123';
 
-async function iniciarSesion(page) {
+async function iniciarSesion(page: Page) {
   await page.goto(URL);
   await page.fill('#username', USER);
   await page.fill('#password', PASS);
