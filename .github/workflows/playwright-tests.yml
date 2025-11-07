@@ -5,8 +5,10 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  schedule:
+    # Ejecutar todos los días a las 14:30 UTC (8:30 AM hora CDMX)
+    - cron: '30 14 * * *'
 
-# 🔐 Da permisos de escritura para que el bot pueda publicar el reporte
 permissions:
   contents: write
 
@@ -15,43 +17,125 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Descarga el código del repositorio
+      # 1️⃣ Descargar el código
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2️⃣ Instala Node.js (versión estable)
+      # 2️⃣ Configurar Node.js
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 18
 
-      # 3️⃣ Instala las dependencias
+      # 3️⃣ Instalar dependencias
       - name: Install dependencies
         run: npm ci
 
-      # 4️⃣ Instala los navegadores de Playwright
+      # 4️⃣ Instalar navegadores de Playwright
       - name: Install Playwright browsers
         run: npx playwright install --with-deps
 
-      # 5️⃣ Ejecuta las pruebas automatizadas y genera el reporte HTML
+      # 5️⃣ Ejecutar las pruebas y generar el reporte HTML
       - name: Run Playwright tests
         run: npx playwright test --reporter=html
 
-      # 6️⃣ Publica el reporte HTML en GitHub Pages
-      - name: Deploy Playwright report to GitHub Pages
+      # 6️⃣ Preparar rama gh-pages
+      - name: Checkout gh-pages branch
+        run: |
+          git fetch origin gh-pages:gh-pages || echo "No gh-pages branch yet"
+          git checkout gh-pages || git checkout --orphan gh-pages
+          mkdir -p reports
+
+      # 7️⃣ Copiar el nuevo reporte con la fecha actual
+      - name: Copy new report with date
+        id: copyreport
+        run: |
+          DATE=$(date +'%Y-%m-%d')
+          mkdir -p reports/$DATE
+          cp -r ../playwright-report/* reports/$DATE/
+          echo "date=$DATE" >> $GITHUB_OUTPUT
+
+      # 8️⃣ Eliminar reportes de más de 60 días
+      - name: Clean reports older than 60 days
+        run: |
+          find reports -maxdepth 1 -type d -mtime +60 -exec rm -rf {} +
+          echo "Reportes antiguos eliminados"
+
+      # 9️⃣ Generar índice HTML con gráfico, porcentaje y color adaptativo
+      - name: Generate index.html
+        run: |
+          echo "<html><head><meta charset='UTF-8'><title>Histórico de Reportes Playwright</title>" > index.html
+          echo "<style>
+            body {font-family:Arial, sans-serif; background:#0f111a; color:#eee; padding:40px;}
+            h1 {color:#55bff3;}
+            ul {list-style:none; padding:0;}
+            li {margin:8px 0; font-size:18px;}
+            a {color:#55bff3; text-decoration:none;}
+            a:hover {text-decoration:underline;}
+            .chart {display:flex; gap:6px; margin:25px 0;}
+            .bar {width:40px; height:100px; border-radius:6px;}
+            .ok {background:#00c853;}
+            .fail {background:#d50000;}
+            .legend {margin-top:10px; font-size:14px; color:#aaa;}
+            .summary {font-size:20px; margin-top:10px;}
+          </style></head><body>" >> index.html
+          echo "<h1>📊 Histórico de Reportes Playwright</h1>" >> index.html
+
+          # Crear listado y recolectar datos
+          echo "<ul>" >> index.html
+          rm -f chart_data.txt || true
+          for dir in $(ls -1 reports | sort -r); do
+            if grep -q "failed" reports/$dir/index.html; then
+              STATUS="❌ Falló"
+              COLOR="fail"
+            else
+              STATUS="✅ OK"
+              COLOR="ok"
+            fi
+            echo "<li><a href='reports/$dir/index.html' target='_blank'>📅 $dir</a> — <strong>$STATUS</strong></li>" >> index.html
+            echo "$dir,$COLOR" >> chart_data.txt
+          done
+          echo "</ul>" >> index.html
+
+          # Extraer últimos 7 días y calcular porcentaje
+          tail -n 7 chart_data.txt | tac > last7.txt
+          OK_COUNT=$(grep -c "ok" last7.txt || true)
+          FAIL_COUNT=$(grep -c "fail" last7.txt || true)
+          TOTAL=$((OK_COUNT + FAIL_COUNT))
+          if [ "$TOTAL" -gt 0 ]; then
+            PERCENT=$((100 * OK_COUNT / TOTAL))
+          else
+            PERCENT=0
+          fi
+
+          # Color adaptativo del porcentaje
+          if [ "$PERCENT" -ge 80 ]; then
+            PERF_COLOR="#00c853"   # verde
+          elif [ "$PERCENT" -ge 50 ]; then
+            PERF_COLOR="#ffd600"   # amarillo
+          else
+            PERF_COLOR="#d50000"   # rojo
+          fi
+
+          # Mostrar resumen y gráfico
+          echo "<div class='summary'>✅ Éxito últimos 7 días: <strong style='color:$PERF_COLOR;'>$PERCENT%</strong> ($OK_COUNT OK / $FAIL_COUNT Falló)</div>" >> index.html
+          echo "<div class='chart'>" >> index.html
+          while IFS=, read -r DATE COLOR; do
+            echo "<div class='bar $COLOR' title='$DATE'></div>" >> index.html
+          done < last7.txt
+          echo "</div>" >> index.html
+          echo "<div class='legend'>🟩 OK &nbsp;&nbsp; 🟥 Falló &nbsp;&nbsp; (últimos 7 días)</div>" >> index.html
+
+          # Pie de página
+          echo "<hr><p>Actualizado: $(date)</p></body></html>" >> index.html
+
+          echo "Archivo index.html actualizado correctamente."
+
+      # 🔟 Publicar en GitHub Pages
+      - name: Deploy to GitHub Pages
         if: always()
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: playwright-report
-          # (Opcional) Mantener reportes anteriores, descomenta esta línea si quieres historial:
-          # keep_files: true
-
-      # 7️⃣ (Opcional) Subir los resultados como artefacto descargable (videos, trazas)
-      - name: Upload test results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-results
-          path: test-results
-          retention-days: 5
+          publish_dir: .
+          keep_files: true
