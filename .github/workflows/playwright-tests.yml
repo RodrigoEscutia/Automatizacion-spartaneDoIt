@@ -39,10 +39,12 @@ jobs:
       - name: Run Playwright tests
         run: npx playwright test --reporter=html
 
-      # 6️⃣ Preparar rama gh-pages
+      # 6️⃣ Preparar rama gh-pages (limpia antes de hacer checkout)
       - name: Checkout gh-pages branch
         run: |
           git fetch origin gh-pages:gh-pages || echo "No gh-pages branch yet"
+          git reset --hard
+          git clean -fdx
           git checkout gh-pages || git checkout --orphan gh-pages
           mkdir -p reports
 
@@ -61,7 +63,7 @@ jobs:
           find reports -maxdepth 1 -type d -mtime +60 -exec rm -rf {} +
           echo "Reportes antiguos eliminados"
 
-      # 9️⃣ Generar índice HTML con gráfico, porcentaje y color adaptativo
+      # 9️⃣ Generar índice HTML con gráfico y porcentaje de éxito (color adaptativo)
       - name: Generate index.html
         run: |
           echo "<html><head><meta charset='UTF-8'><title>Histórico de Reportes Playwright</title>" > index.html
