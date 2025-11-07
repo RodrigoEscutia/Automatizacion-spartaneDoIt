@@ -39,7 +39,13 @@ jobs:
       - name: Run Playwright tests
         run: npx playwright test --reporter=html
 
-      # 6️⃣ Preparar rama gh-pages (limpia antes de hacer checkout)
+      # 6️⃣ Guardar temporalmente el reporte antes del checkout
+      - name: Save Playwright report
+        run: |
+          mkdir -p /tmp/playwright-report
+          cp -r playwright-report/* /tmp/playwright-report/
+
+      # 7️⃣ Preparar rama gh-pages (limpia antes de hacer checkout)
       - name: Checkout gh-pages branch
         run: |
           git fetch origin gh-pages:gh-pages || echo "No gh-pages branch yet"
@@ -48,22 +54,22 @@ jobs:
           git checkout gh-pages || git checkout --orphan gh-pages
           mkdir -p reports
 
-      # 7️⃣ Copiar el nuevo reporte con la fecha actual
+      # 8️⃣ Copiar el nuevo reporte con la fecha actual
       - name: Copy new report with date
         id: copyreport
         run: |
           DATE=$(date +'%Y-%m-%d')
           mkdir -p reports/$DATE
-          cp -r ../playwright-report/* reports/$DATE/
+          cp -r /tmp/playwright-report/* reports/$DATE/
           echo "date=$DATE" >> $GITHUB_OUTPUT
 
-      # 8️⃣ Eliminar reportes de más de 60 días
+      # 9️⃣ Eliminar reportes de más de 60 días
       - name: Clean reports older than 60 days
         run: |
           find reports -maxdepth 1 -type d -mtime +60 -exec rm -rf {} +
           echo "Reportes antiguos eliminados"
 
-      # 9️⃣ Generar índice HTML con gráfico y porcentaje de éxito (color adaptativo)
+      # 🔟 Generar índice HTML con gráfico y porcentaje de éxito (color adaptativo)
       - name: Generate index.html
         run: |
           echo "<html><head><meta charset='UTF-8'><title>Histórico de Reportes Playwright</title>" > index.html
@@ -133,7 +139,7 @@ jobs:
 
           echo "Archivo index.html actualizado correctamente."
 
-      # 🔟 Publicar en GitHub Pages
+      # 1️⃣1️⃣ Publicar en GitHub Pages
       - name: Deploy to GitHub Pages
         if: always()
         uses: peaceiris/actions-gh-pages@v3
